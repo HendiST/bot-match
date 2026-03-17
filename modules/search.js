@@ -29,18 +29,21 @@ async function startSearch(bot, chatId, telegramId) {
   }
   
   // Reset daily limits if needed
-  db.userOps.resetDailyLimits.run();
+  db.userOps.resetDailyLimits();
+  
+  // Re-fetch user after reset
+  const updatedUser = registration.getUser(telegramId);
   
   // Check daily limit
-  const limits = user.role === 'elite' ? config.ELITE_LIMITS :
-                 user.role === 'vip' ? config.VIP_LIMITS :
+  const limits = updatedUser.role === 'elite' ? config.ELITE_LIMITS :
+                 updatedUser.role === 'vip' ? config.VIP_LIMITS :
                  config.FREE_LIMITS;
   
-  if (limits.dailyLikes > 0 && user.daily_likes >= limits.dailyLikes) {
+  if (limits.dailyLikes > 0 && updatedUser.daily_likes >= limits.dailyLikes) {
     bot.sendMessage(
       chatId,
       `⚠️ *Batas Like Harian Tercapai*\n\n` +
-      `Kamu sudah menggunakan ${user.daily_likes}/${limits.dailyLikes} like hari ini.\n\n` +
+      `Kamu sudah menggunakan ${updatedUser.daily_likes}/${limits.dailyLikes} like hari ini.\n\n` +
       `_Upgrade ke VIP untuk like tanpa batas!_`,
       {
         parse_mode: 'Markdown',
@@ -71,11 +74,8 @@ async function showNextProfile(bot, chatId, telegramId) {
   // Get viewed users to exclude
   const viewedUsers = userState.temp.viewedUsers || [];
   
-  // Get users already liked or skipped
-  const likedResult = db.db.prepare(`
-    SELECT target_id FROM likes WHERE user_id = ?
-  `).all(user.id);
-  const likedIds = likedResult.map(r => r.target_id);
+  // Get users already liked
+  const likedIds = db.getLikedUserIds(user.id);
   
   const excludeIds = [...viewedUsers, ...likedIds, user.id];
   
@@ -103,7 +103,7 @@ async function showNextProfile(bot, chatId, telegramId) {
   state.updateTemp(telegramId, { viewedUsers });
   
   // Check if user already liked this candidate
-  const existingLike = db.likeOps.getLike.get(user.id, candidate.id);
+  const existingLike = db.likeOps.getLike(user.id, candidate.id);
   
   // Display profile
   await displayProfile(bot, chatId, candidate, existingLike ? true : false);
@@ -215,7 +215,7 @@ async function handleLike(bot, chatId, telegramId, targetId) {
   }
   
   // Check if already liked
-  const existingLike = db.likeOps.getLike.get(user.id, targetId);
+  const existingLike = db.likeOps.getLike(user.id, targetId);
   if (existingLike) {
     bot.sendMessage(chatId, 'ℹ️ Kamu sudah menyukai user ini.');
     await showNextProfile(bot, chatId, telegramId);
@@ -223,14 +223,14 @@ async function handleLike(bot, chatId, telegramId, targetId) {
   }
   
   // Check if target already liked user (MATCH!)
-  const targetLike = db.likeOps.getLike.get(targetId, user.id);
+  const targetLike = db.likeOps.getLike(targetId, user.id);
   
   let isMatch = false;
   
   if (targetLike && !targetLike.is_match) {
     // Create match!
-    db.likeOps.create.run(user.id, targetId, 1);
-    db.likeOps.setMatch.run(targetId, user.id);
+    db.likeOps.create(user.id, targetId, 1);
+    db.likeOps.setMatch(targetId, user.id);
     isMatch = true;
     
     // Notify both users
@@ -270,7 +270,7 @@ async function handleLike(bot, chatId, telegramId, targetId) {
     }
   } else {
     // Just like
-    db.likeOps.create.run(user.id, targetId, 0);
+    db.likeOps.create(user.id, targetId, 0);
     
     bot.sendMessage(
       chatId,
@@ -306,7 +306,7 @@ async function handleLike(bot, chatId, telegramId, targetId) {
   }
   
   // Increment user likes
-  db.userOps.incrementLikes.run(user.id);
+  db.userOps.incrementLikes(user.id);
   
   // Continue to next profile if not match
   if (!isMatch) {
@@ -335,7 +335,7 @@ async function handleReject(bot, chatId, telegramId, targetId) {
   const user = registration.getUser(telegramId);
   
   // Delete the like
-  db.likeOps.delete.run(targetId, user.id);
+  db.likeOps.delete(targetId, user.id);
   
   bot.sendMessage(chatId, '✅ Ditolak.', { parse_mode: 'Markdown' });
   
@@ -354,7 +354,7 @@ async function showLikes(bot, chatId, telegramId) {
     return;
   }
   
-  const likes = db.likeOps.getLikedBy.all(user.id);
+  const likes = db.likeOps.getLikedBy(user.id);
   
   if (likes.length === 0) {
     bot.sendMessage(
@@ -390,7 +390,7 @@ async function showMatches(bot, chatId, telegramId) {
     return;
   }
   
-  const matches = db.likeOps.getMatches.all(user.id, user.id);
+  const matches = db.likeOps.getMatches(user.id, user.id);
   
   if (matches.length === 0) {
     bot.sendMessage(

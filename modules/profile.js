@@ -35,7 +35,7 @@ async function showProfile(bot, chatId, telegramId, isOwn = true) {
   }
   
   // Add stats
-  const likesReceived = db.likeOps.countLikesReceived.get(user.id).count;
+  const likesReceived = db.likeOps.countLikesReceived(user.id).count;
   caption += `\n\n❤️ ${likesReceived} orang menyukai profil ini`;
   
   try {
@@ -169,9 +169,16 @@ async function handleEditInput(bot, msg) {
     case 'video':
       if (msg.video) {
         value = msg.video.file_id;
-        db.userOps.update.run({
-          ...user,
-          video_id: value
+        db.userOps.update({
+          nama: user.nama,
+          umur: user.umur,
+          gender: user.gender,
+          preferensi: user.preferensi,
+          kota: user.kota,
+          bio: user.bio,
+          photo_id: user.photo_id,
+          video_id: value,
+          id: user.id
         });
         bot.sendMessage(chatId, '✅ Video berhasil diperbarui!');
         state.resetToIdle(telegramId);
@@ -182,10 +189,20 @@ async function handleEditInput(bot, msg) {
   }
   
   if (success) {
-    const updateData = { ...user };
+    const updateData = {
+      nama: user.nama,
+      umur: user.umur,
+      gender: user.gender,
+      preferensi: user.preferensi,
+      kota: user.kota,
+      bio: user.bio,
+      photo_id: user.photo_id,
+      video_id: user.video_id,
+      id: user.id
+    };
     updateData[field] = value;
     
-    db.userOps.update.run(updateData);
+    db.userOps.update(updateData);
     
     bot.sendMessage(chatId, `✅ ${field.charAt(0).toUpperCase() + field.slice(1)} berhasil diperbarui!`);
     state.resetToIdle(telegramId);
@@ -214,10 +231,20 @@ function handleEditSelection(bot, chatId, telegramId, field, value) {
   
   if (!user) return;
   
-  const updateData = { ...user };
+  const updateData = {
+    nama: user.nama,
+    umur: user.umur,
+    gender: user.gender,
+    preferensi: user.preferensi,
+    kota: user.kota,
+    bio: user.bio,
+    photo_id: user.photo_id,
+    video_id: user.video_id,
+    id: user.id
+  };
   updateData[field] = value;
   
-  db.userOps.update.run(updateData);
+  db.userOps.update(updateData);
   
   bot.sendMessage(chatId, `✅ ${field.charAt(0).toUpperCase() + field.slice(1)} berhasil diperbarui!`);
   state.resetToIdle(telegramId);
@@ -249,7 +276,7 @@ async function showBlockedUsers(bot, chatId, telegramId) {
     return;
   }
   
-  const blocked = db.blockOps.getBlocked.all(user.id);
+  const blocked = db.blockOps.getBlocked(user.id);
   
   if (blocked.length === 0) {
     bot.sendMessage(
@@ -291,7 +318,7 @@ function blockUser(bot, chatId, telegramId, targetId) {
     return;
   }
   
-  db.blockOps.block.run(user.id, targetId);
+  db.blockOps.block(user.id, targetId);
   
   bot.sendMessage(
     chatId,
@@ -308,7 +335,7 @@ function unblockUser(bot, chatId, telegramId, targetId) {
   
   if (!user) return;
   
-  db.blockOps.unblock.run(user.id, targetId);
+  db.blockOps.unblock(user.id, targetId);
   
   bot.sendMessage(chatId, '✅ User berhasil dibuka blokir.');
   showBlockedUsers(bot, chatId, telegramId);
@@ -362,7 +389,7 @@ function submitReport(bot, chatId, telegramId, reason) {
     return;
   }
   
-  db.reportOps.create.run(user.id, targetId, reason);
+  db.reportOps.create(user.id, targetId, reason);
   
   state.resetToIdle(telegramId);
   
@@ -402,13 +429,13 @@ function deleteAccount(bot, chatId, telegramId) {
   if (!user) return;
   
   // Delete user data
-  db.db.prepare('DELETE FROM user_photos WHERE user_id = ?').run(user.id);
-  db.db.prepare('DELETE FROM user_videos WHERE user_id = ?').run(user.id);
-  db.db.prepare('DELETE FROM likes WHERE user_id = ? OR target_id = ?').run(user.id, user.id);
-  db.db.prepare('DELETE FROM messages WHERE from_id = ? OR to_id = ?').run(user.id, user.id);
-  db.db.prepare('DELETE FROM blocks WHERE user_id = ? OR blocked_id = ?').run(user.id, user.id);
-  db.db.prepare('DELETE FROM reports WHERE reporter_id = ? OR reported_id = ?').run(user.id, user.id);
-  db.db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
+  db.runQuery('DELETE FROM user_photos WHERE user_id = ?', [user.id]);
+  db.runQuery('DELETE FROM user_videos WHERE user_id = ?', [user.id]);
+  db.runQuery('DELETE FROM likes WHERE user_id = ? OR target_id = ?', [user.id, user.id]);
+  db.runQuery('DELETE FROM messages WHERE from_id = ? OR to_id = ?', [user.id, user.id]);
+  db.runQuery('DELETE FROM blocks WHERE user_id = ? OR blocked_id = ?', [user.id, user.id]);
+  db.runQuery('DELETE FROM reports WHERE reporter_id = ? OR reported_id = ?', [user.id, user.id]);
+  db.runQuery('DELETE FROM users WHERE id = ?', [user.id]);
   
   state.clearState(telegramId);
   
@@ -437,7 +464,7 @@ async function addPhoto(bot, msg) {
     const photoId = photos[photos.length - 1].file_id;
     
     // Check existing photos count
-    const existingPhotos = db.photoOps.getByUser.all(user.id);
+    const existingPhotos = db.photoOps.getByUser(user.id);
     
     if (existingPhotos.length >= 5) {
       bot.sendMessage(chatId, '❌ Maksimal 5 foto per profil.');
@@ -445,13 +472,20 @@ async function addPhoto(bot, msg) {
     }
     
     // Add photo
-    db.photoOps.add.run(user.id, photoId, null, existingPhotos.length);
+    db.photoOps.add(user.id, photoId, null, existingPhotos.length);
     
     // Set as main photo if first
     if (existingPhotos.length === 0) {
-      db.userOps.update.run({
-        ...user,
-        photo_id: photoId
+      db.userOps.update({
+        nama: user.nama,
+        umur: user.umur,
+        gender: user.gender,
+        preferensi: user.preferensi,
+        kota: user.kota,
+        bio: user.bio,
+        photo_id: photoId,
+        video_id: user.video_id,
+        id: user.id
       });
     }
     

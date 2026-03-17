@@ -9,6 +9,7 @@ const keyboard = require('./keyboard');
 const config = require('../config');
 const registration = require('./registration');
 const fakeUserSeeder = require('./fakeUserSeeder');
+const search = require('./search');
 
 /**
  * Start sending message to a user
@@ -45,13 +46,13 @@ async function startSendMessage(bot, chatId, telegramId, targetId) {
   const isElite = user.role === 'elite' && user.elite_expired && new Date(user.elite_expired) > new Date();
   
   // Check if there's a match
-  const matchCheck = db.likeOps.checkMutual.get(user.id, targetId);
-  const targetLikeCheck = db.likeOps.getLike.get(targetId, user.id);
+  const matchCheck = db.likeOps.checkMutual(user.id, targetId);
+  const targetLikeCheck = db.likeOps.getLike(targetId, user.id);
   const hasMatch = matchCheck || (targetLikeCheck && targetLikeCheck.is_match);
   
   if (!isElite && !hasMatch) {
     // Need to match first (auto-like when sending message)
-    db.likeOps.create.run(user.id, targetId, 0);
+    db.likeOps.create(user.id, targetId, 0);
     
     bot.sendMessage(
       chatId,
@@ -119,10 +120,10 @@ async function handleSendMessage(bot, msg) {
   }
   
   // Save message to database
-  db.msgOps.create.run(user.id, targetId, messageText || '[Media]', mediaType, mediaId);
+  db.msgOps.create(user.id, targetId, messageText || '[Media]', mediaType, mediaId);
   
   // Increment message count
-  db.userOps.incrementMessages.run(user.id);
+  db.userOps.incrementMessages(user.id);
   
   // Reset state
   state.resetToIdle(telegramId);
@@ -209,7 +210,7 @@ async function showInbox(bot, chatId, telegramId) {
     return;
   }
   
-  const conversations = db.msgOps.getInbox.all(user.id, user.id, user.id);
+  const conversations = db.msgOps.getInbox(user.id, user.id, user.id);
   
   if (conversations.length === 0) {
     bot.sendMessage(
@@ -254,10 +255,10 @@ async function showChat(bot, chatId, telegramId, targetId) {
   }
   
   // Get conversation
-  const messages = db.msgOps.getConversation.all(user.id, targetId, targetId, user.id);
+  const messages = db.msgOps.getConversation(user.id, targetId, targetId, user.id);
   
   // Mark messages as read
-  db.msgOps.markRead.run(user.id, targetId);
+  db.msgOps.markRead(user.id, targetId);
   
   let chatText = `💬 *Chat dengan ${target.nama}*\n\n`;
   
@@ -309,6 +310,3 @@ module.exports = {
   showChat,
   viewUserProfile
 };
-
-// Import search at end to avoid circular dependency
-const search = require('./search');

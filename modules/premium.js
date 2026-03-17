@@ -225,7 +225,7 @@ function demoActivateVip(bot, chatId, telegramId) {
   expiryDate.setDate(expiryDate.getDate() + config.VIP_DURATION);
   
   // Update user role
-  db.userOps.updateRole.run('vip', expiryDate.toISOString(), null, user.id);
+  db.userOps.updateRole('vip', expiryDate.toISOString(), null, user.id);
   
   bot.sendMessage(
     chatId,
@@ -259,7 +259,7 @@ function demoActivateElite(bot, chatId, telegramId) {
   expiryDate.setDate(expiryDate.getDate() + config.ELITE_DURATION);
   
   // Update user role
-  db.userOps.updateRole.run('elite', null, expiryDate.toISOString(), user.id);
+  db.userOps.updateRole('elite', null, expiryDate.toISOString(), user.id);
   
   bot.sendMessage(
     chatId,
@@ -315,7 +315,7 @@ function activateBoost(bot, chatId, telegramId) {
   const boostUntil = new Date();
   boostUntil.setMinutes(boostUntil.getMinutes() + config.BOOST_DURATION);
   
-  db.userOps.updateBoost.run(boostUntil.toISOString(), user.id);
+  db.userOps.updateBoost(boostUntil.toISOString(), user.id);
   
   bot.sendMessage(
     chatId,

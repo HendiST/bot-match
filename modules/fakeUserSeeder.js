@@ -153,7 +153,7 @@ async function createFakeUser(bot = null) {
   const telegramId = -Math.floor(Math.random() * 1000000000) - 1; // Negative IDs for fake users
   
   try {
-    const result = db.userOps.create.run({
+    db.userOps.create({
       telegram_id: telegramId,
       nama: userData.nama,
       umur: userData.umur,
@@ -171,8 +171,9 @@ async function createFakeUser(bot = null) {
     });
     
     return {
-      id: result.lastInsertRowid,
-      ...userData,
+      nama: userData.nama,
+      umur: userData.umur,
+      gender: userData.gender,
       photo_url: photoUrl,
       is_fake: true
     };
@@ -192,7 +193,7 @@ async function seedFakeUsers(count = null, bot = null) {
   
   console.log(`🌱 Seeding ${count} fake users...`);
   
-  const existingFakeCount = db.userOps.countFake.get().count;
+  const existingFakeCount = db.userOps.countFake().count;
   const neededCount = count - existingFakeCount;
   
   if (neededCount <= 0) {
@@ -224,14 +225,14 @@ async function seedFakeUsers(count = null, bot = null) {
  */
 async function autoLikeBack(bot, userId) {
   // Get all fake users
-  const fakeUsers = db.userOps.getFakeUsers.all();
+  const fakeUsers = db.userOps.getFakeUsers();
   
   for (const fakeUser of fakeUsers) {
     // Random chance to like back
     if (Math.random() > config.FAKE_USER.autoLikeChance) continue;
     
     // Check if already liked
-    const existingLike = db.likeOps.getLike.get(fakeUser.id, userId);
+    const existingLike = db.likeOps.getLike(fakeUser.id, userId);
     if (existingLike) continue;
     
     // Random delay
@@ -242,15 +243,15 @@ async function autoLikeBack(bot, userId) {
     setTimeout(async () => {
       try {
         // Check if user liked the fake user first
-        const userLike = db.likeOps.getLike.get(userId, fakeUser.id);
+        const userLike = db.likeOps.getLike(userId, fakeUser.id);
         
         if (userLike) {
           // Create match
-          db.likeOps.create.run(fakeUser.id, userId, 1);
-          db.likeOps.setMatch.run(userId, fakeUser.id);
+          db.likeOps.create(fakeUser.id, userId, 1);
+          db.likeOps.setMatch(userId, fakeUser.id);
           
           // Notify user about match
-          const user = db.userOps.getById.get(userId);
+          const user = db.userOps.getById(userId);
           if (user && bot) {
             try {
               await bot.sendMessage(
@@ -284,7 +285,7 @@ async function autoLikeBack(bot, userId) {
 async function autoSendMessage(bot, userId, fakeUser = null) {
   // Select random fake user if not provided
   if (!fakeUser) {
-    const fakeUsers = db.userOps.getFakeUsers.all();
+    const fakeUsers = db.userOps.getFakeUsers();
     fakeUser = fakeUsers[Math.floor(Math.random() * fakeUsers.length)];
   }
   
@@ -300,14 +301,14 @@ async function autoSendMessage(bot, userId, fakeUser = null) {
   
   setTimeout(async () => {
     try {
-      const user = db.userOps.getById.get(userId);
+      const user = db.userOps.getById(userId);
       if (!user || !bot) return;
       
       // Select random message
       const message = config.FAKE_MESSAGES[Math.floor(Math.random() * config.FAKE_MESSAGES.length)];
       
       // Save message to database
-      db.msgOps.create.run(fakeUser.id, userId, message, null, null);
+      db.msgOps.create(fakeUser.id, userId, message, null, null);
       
       // Send notification to user
       try {

@@ -17,7 +17,7 @@ function startRegistration(bot, msg) {
   const telegramId = msg.from.id;
   
   // Check if user already exists
-  const existingUser = db.userOps.getByTelegramId.get(telegramId);
+  const existingUser = db.userOps.getByTelegramId(telegramId);
   if (existingUser && existingUser.photo_id) {
     // User is already registered
     showMainMenu(bot, chatId);
@@ -278,11 +278,11 @@ async function completeRegistration(bot, chatId, telegramId) {
   
   try {
     // Check if user already exists in DB
-    let existingUser = db.userOps.getByTelegramId.get(telegramId);
+    let existingUser = db.userOps.getByTelegramId(telegramId);
     
     if (existingUser) {
       // Update existing user
-      db.userOps.update.run({
+      db.userOps.update({
         id: existingUser.id,
         nama: userData.nama || existingUser.nama,
         umur: userData.umur || existingUser.umur,
@@ -295,7 +295,7 @@ async function completeRegistration(bot, chatId, telegramId) {
       });
     } else {
       // Create new user
-      db.userOps.create.run({
+      db.userOps.create({
         telegram_id: telegramId,
         nama: userData.nama,
         umur: userData.umur,
@@ -327,9 +327,12 @@ async function completeRegistration(bot, chatId, telegramId) {
     );
     
     // Trigger fake user auto-like after some activity
-    setTimeout(() => {
-      fakeUserSeeder.autoLikeBack(bot, existingUser ? existingUser.id : db.userOps.getByTelegramId.get(telegramId).id);
-    }, 5000);
+    const newUserId = existingUser ? existingUser.id : db.userOps.getByTelegramId(telegramId)?.id;
+    if (newUserId) {
+      setTimeout(() => {
+        fakeUserSeeder.autoLikeBack(bot, newUserId);
+      }, 5000);
+    }
     
   } catch (error) {
     console.error('Registration error:', error);
@@ -355,7 +358,7 @@ function showMainMenu(bot, chatId) {
  * Check if user is registered
  */
 function isUserRegistered(telegramId) {
-  const user = db.userOps.getByTelegramId.get(telegramId);
+  const user = db.userOps.getByTelegramId(telegramId);
   return user && user.photo_id;
 }
 
@@ -363,14 +366,14 @@ function isUserRegistered(telegramId) {
  * Get user by telegram ID
  */
 function getUser(telegramId) {
-  return db.userOps.getByTelegramId.get(telegramId);
+  return db.userOps.getByTelegramId(telegramId);
 }
 
 /**
  * Get user by ID
  */
 function getUserById(id) {
-  return db.userOps.getById.get(id);
+  return db.userOps.getById(id);
 }
 
 module.exports = {
