@@ -9,10 +9,34 @@ const keyboard = require('./keyboard');
 const config = require('../config');
 const fakeUserSeeder = require('./fakeUserSeeder');
 
+// Store message IDs to delete
+const messageStore = new Map();
+
+/**
+ * Delete previous message
+ */
+async function deletePreviousMessage(bot, chatId, telegramId) {
+  const lastMsgId = messageStore.get(telegramId);
+  if (lastMsgId) {
+    try {
+      await bot.deleteMessage(chatId, lastMsgId);
+    } catch (e) {
+      // Message might be too old or already deleted
+    }
+  }
+}
+
+/**
+ * Store message ID for deletion
+ */
+function storeMessage(telegramId, msgId) {
+  messageStore.set(telegramId, msgId);
+}
+
 /**
  * Start registration process
  */
-function startRegistration(bot, msg) {
+async function startRegistration(bot, msg) {
   const chatId = msg.chat.id;
   const telegramId = msg.from.id;
   
@@ -23,9 +47,6 @@ function startRegistration(bot, msg) {
     showMainMenu(bot, chatId);
     return;
   }
-  
-  // Set state to waiting for name
-  state.setRegState(telegramId, state.REGISTRATION_STATES.WAITING_NAME);
   
   // If user data exists but no photo
   if (existingUser) {
@@ -41,19 +62,24 @@ function startRegistration(bot, msg) {
     
     // Jump to media upload
     state.setRegState(telegramId, state.REGISTRATION_STATES.WAITING_MEDIA);
-    requestMedia(bot, chatId);
+    requestMedia(bot, chatId, telegramId);
     return;
   }
   
+  // Set state to waiting for name
+  state.setRegState(telegramId, state.REGISTRATION_STATES.WAITING_NAME);
+  state.updateData(telegramId, {}); // Initialize empty data
+  
   // Start new registration
-  bot.sendMessage(
+  const sentMsg = await bot.sendMessage(
     chatId,
     '👋 *Selamat Datang di Bot Match!*\n\n' +
     'Mari buat profil kencan kamu! 💌\n\n' +
-    '📝 *Langkah 1/6*\n' +
+    '📝 *Langkah 1/5*\n' +
     'Masukkan *nama* kamu:',
     { parse_mode: 'Markdown' }
   );
+  storeMessage(telegramId, sentMsg.message_id);
 }
 
 /**
@@ -71,16 +97,19 @@ async function handleRegistrationInput(bot, msg) {
       await handleNameInput(bot, chatId, telegramId, text);
       break;
     
-    case state.REGISTRATION_STATES.WAITING_BIO:
-      await handleBioInput(bot, chatId, telegramId, text);
+    case state.REGISTRATION_STATES.WAITING_AGE:
+      await handleAgeInput(bot, chatId, telegramId, text);
+      break;
+    
+    case state.REGISTRATION_STATES.WAITING_CITY:
+      await handleCityInput(bot, chatId, telegramId, text);
       break;
     
     case state.REGISTRATION_STATES.WAITING_MEDIA:
-      await handleMediaInput(bot, msg);
+      // Media handled separately
       break;
     
     default:
-      // Not in registration, ignore
       break;
   }
 }
@@ -89,124 +118,119 @@ async function handleRegistrationInput(bot, msg) {
  * Handle name input
  */
 async function handleNameInput(bot, chatId, telegramId, name) {
-  if (name.length < 2 || name.length > 50) {
-    bot.sendMessage(chatId, '❌ Nama harus 2-50 karakter. Coba lagi:');
+  if (!name || name.length < 2 || name.length > 50) {
+    const sentMsg = await bot.sendMessage(chatId, '❌ Nama harus 2-50 karakter. Coba lagi:');
+    storeMessage(telegramId, sentMsg.message_id);
     return;
   }
+  
+  // Delete previous bot message
+  await deletePreviousMessage(bot, chatId, telegramId);
   
   state.updateData(telegramId, { nama: name });
   state.setRegState(telegramId, state.REGISTRATION_STATES.WAITING_AGE);
   
-  bot.sendMessage(
+  const sentMsg = await bot.sendMessage(
     chatId,
-    `✅ Nama: *${name}*\n\n📝 *Langkah 2/6*\nPilih *umur* kamu:`,
-    {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.ageSelection()
-    }
+    `✅ Nama: *${name}*\n\n📝 *Langkah 2/5*\nMasukkan *umur* kamu (contoh: 25):`,
+    { parse_mode: 'Markdown' }
   );
+  storeMessage(telegramId, sentMsg.message_id);
 }
 
 /**
- * Handle age selection
+ * Handle age input (text)
  */
-function handleAgeSelection(bot, chatId, telegramId, age) {
-  if (age < config.AGE_RANGE.min || age > config.AGE_RANGE.max) {
-    bot.sendMessage(chatId, `❌ Umur harus ${config.AGE_RANGE.min}-${config.AGE_RANGE.max} tahun.`);
+async function handleAgeInput(bot, chatId, telegramId, ageText) {
+  const age = parseInt(ageText);
+  
+  if (isNaN(age) || age < 18 || age > 60) {
+    const sentMsg = await bot.sendMessage(chatId, '❌ Umur harus angka 18-60. Coba lagi:');
+    storeMessage(telegramId, sentMsg.message_id);
     return;
   }
+  
+  // Delete previous bot message
+  await deletePreviousMessage(bot, chatId, telegramId);
   
   state.updateData(telegramId, { umur: age });
   state.setRegState(telegramId, state.REGISTRATION_STATES.WAITING_GENDER);
   
-  bot.sendMessage(
+  const sentMsg = await bot.sendMessage(
     chatId,
-    `✅ Umur: *${age} tahun*\n\n📝 *Langkah 3/6*\nPilih *gender* kamu:`,
+    `✅ Umur: *${age} tahun*\n\n📝 *Langkah 3/5*\nPilih *gender* kamu:`,
     {
       parse_mode: 'Markdown',
       reply_markup: keyboard.genderSelection()
     }
   );
+  storeMessage(telegramId, sentMsg.message_id);
 }
 
 /**
  * Handle gender selection
  */
-function handleGenderSelection(bot, chatId, telegramId, gender) {
+async function handleGenderSelection(bot, chatId, telegramId, gender) {
+  await deletePreviousMessage(bot, chatId, telegramId);
+  
   state.updateData(telegramId, { gender });
   state.setRegState(telegramId, state.REGISTRATION_STATES.WAITING_PREFERENCE);
   
-  bot.sendMessage(
+  const sentMsg = await bot.sendMessage(
     chatId,
-    `✅ Gender: *${gender}*\n\n📝 *Langkah 4/6*\nKamu tertarik dengan siapa?`,
+    `✅ Gender: *${gender}*\n\n📝 *Langkah 4/5*\nKamu tertarik dengan siapa?`,
     {
       parse_mode: 'Markdown',
       reply_markup: keyboard.preferenceSelection()
     }
   );
+  storeMessage(telegramId, sentMsg.message_id);
 }
 
 /**
  * Handle preference selection
  */
-function handlePreferenceSelection(bot, chatId, telegramId, preference) {
+async function handlePreferenceSelection(bot, chatId, telegramId, preference) {
+  await deletePreviousMessage(bot, chatId, telegramId);
+  
   state.updateData(telegramId, { preferensi: preference });
   state.setRegState(telegramId, state.REGISTRATION_STATES.WAITING_CITY);
   
-  bot.sendMessage(
+  const sentMsg = await bot.sendMessage(
     chatId,
-    `✅ Tertarik dengan: *${preference}*\n\n📝 *Langkah 5/6*\nPilih *kota* kamu:`,
-    {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard.citySelection()
-    }
+    `✅ Tertarik dengan: *${preference}*\n\n📝 *Langkah 5/5*\nMasukkan *kota* kamu (contoh: Jakarta):`,
+    { parse_mode: 'Markdown' }
   );
+  storeMessage(telegramId, sentMsg.message_id);
 }
 
 /**
- * Handle city selection
+ * Handle city input (text)
  */
-function handleCitySelection(bot, chatId, telegramId, cityIndex) {
-  const city = config.CITIES[cityIndex];
+async function handleCityInput(bot, chatId, telegramId, city) {
+  if (!city || city.length < 2 || city.length > 50) {
+    const sentMsg = await bot.sendMessage(chatId, '❌ Nama kota tidak valid. Coba lagi:');
+    storeMessage(telegramId, sentMsg.message_id);
+    return;
+  }
+  
+  // Capitalize first letter
+  city = city.charAt(0).toUpperCase() + city.slice(1).toLowerCase();
+  
+  // Delete previous bot message
+  await deletePreviousMessage(bot, chatId, telegramId);
   
   state.updateData(telegramId, { kota: city });
-  state.setRegState(telegramId, state.REGISTRATION_STATES.WAITING_BIO);
-  
-  bot.sendMessage(
-    chatId,
-    `✅ Kota: *${city}*\n\n📝 *Langkah 6/6*\nTulis *bio* kamu (deskripsi singkat tentang dirimu):\n\n` +
-    '_Contoh: Suka traveling dan kopi, cari teman untuk jalan-jalan_',
-    {
-      parse_mode: 'Markdown'
-    }
-  );
-}
-
-/**
- * Handle bio input
- */
-async function handleBioInput(bot, chatId, telegramId, bio) {
-  if (bio.length < 10) {
-    bot.sendMessage(chatId, '❌ Bio minimal 10 karakter. Ceritakan lebih tentang dirimu:');
-    return;
-  }
-  
-  if (bio.length > 500) {
-    bot.sendMessage(chatId, '❌ Bio maksimal 500 karakter. Perpendek sedikit:');
-    return;
-  }
-  
-  state.updateData(telegramId, { bio });
   state.setRegState(telegramId, state.REGISTRATION_STATES.WAITING_MEDIA);
   
-  requestMedia(bot, chatId);
+  requestMedia(bot, chatId, telegramId);
 }
 
 /**
  * Request media upload
  */
-function requestMedia(bot, chatId) {
-  bot.sendMessage(
+async function requestMedia(bot, chatId, telegramId) {
+  const sentMsg = await bot.sendMessage(
     chatId,
     '📸 *Upload Foto/Video Profil*\n\n' +
     'Kamu *WAJIB* upload minimal 1 foto atau video untuk melanjutkan.\n\n' +
@@ -216,6 +240,7 @@ function requestMedia(bot, chatId) {
       reply_markup: keyboard.mediaRequest()
     }
   );
+  storeMessage(telegramId, sentMsg.message_id);
 }
 
 /**
@@ -229,7 +254,6 @@ async function handleMediaInput(bot, msg) {
   let mediaType = null;
   
   if (msg.photo) {
-    // Get the largest photo
     const photos = msg.photo;
     fileId = photos[photos.length - 1].file_id;
     mediaType = 'photo';
@@ -240,12 +264,13 @@ async function handleMediaInput(bot, msg) {
     fileId = msg.document.file_id;
     mediaType = 'video';
   } else {
-    bot.sendMessage(chatId, '❌ Kirim foto atau video, bukan file lain.');
+    const sentMsg = await bot.sendMessage(chatId, '❌ Kirim foto atau video, bukan file lain.');
+    storeMessage(telegramId, sentMsg.message_id);
     return;
   }
   
-  const userState = state.getState(telegramId);
-  const userData = userState.data;
+  // Delete previous bot message
+  await deletePreviousMessage(bot, chatId, telegramId);
   
   // Update user data with media
   if (mediaType === 'photo') {
@@ -254,11 +279,12 @@ async function handleMediaInput(bot, msg) {
     state.updateData(telegramId, { video_id: fileId });
   }
   
-  bot.sendMessage(
+  const sentMsg = await bot.sendMessage(
     chatId,
-    `✅ ${mediaType === 'photo' ? 'Foto' : 'Video'} berhasil diupload!\n\nMau upload lagi?`,
+    `✅ ${mediaType === 'photo' ? 'Foto' : 'Video'} berhasil diupload!\n\nMau upload lagi atau selesai?`,
     { reply_markup: keyboard.mediaRequest() }
   );
+  storeMessage(telegramId, sentMsg.message_id);
 }
 
 /**
@@ -270,41 +296,58 @@ async function completeRegistration(bot, chatId, telegramId) {
   
   // Check if user has at least one media
   if (!userData.photo_id && !userData.video_id) {
-    bot.sendMessage(chatId, '❌ Kamu harus upload minimal 1 foto atau video!', {
+    const sentMsg = await bot.sendMessage(chatId, '❌ Kamu harus upload minimal 1 foto atau video!', {
       reply_markup: keyboard.mediaRequest()
     });
+    storeMessage(telegramId, sentMsg.message_id);
     return;
   }
+  
+  // Delete previous bot message
+  await deletePreviousMessage(bot, chatId, telegramId);
+  
+  // Clear message store
+  messageStore.delete(telegramId);
   
   try {
     // Check if user already exists in DB
     let existingUser = db.userOps.getByTelegramId(telegramId);
     
+    // Prepare data - ensure no undefined values
+    const name = userData.nama || 'User';
+    const age = userData.umur || 25;
+    const gender = userData.gender || 'Pria';
+    const pref = userData.preferensi || 'Semua';
+    const city = userData.kota || 'Jakarta';
+    const bio = userData.bio || '';
+    const photoId = userData.photo_id || null;
+    const videoId = userData.video_id || null;
+    
     if (existingUser) {
       // Update existing user
       db.userOps.update({
         id: existingUser.id,
-        nama: userData.nama || existingUser.nama,
-        umur: userData.umur || existingUser.umur,
-        gender: userData.gender || existingUser.gender,
-        preferensi: userData.preferensi || existingUser.preferensi,
-        kota: userData.kota || existingUser.kota,
-        bio: userData.bio || existingUser.bio,
-        photo_id: userData.photo_id || existingUser.photo_id,
-        video_id: userData.video_id || existingUser.video_id
+        nama: name,
+        umur: age,
+        gender: gender,
+        preferensi: pref,
+        kota: city,
+        bio: bio,
+        photo_id: photoId,
+        video_id: videoId
       });
     } else {
       // Create new user
       db.userOps.create({
         telegram_id: telegramId,
-        nama: userData.nama,
-        umur: userData.umur,
-        gender: userData.gender,
-        preferensi: userData.preferensi,
-        kota: userData.kota,
-        bio: userData.bio,
-        photo_id: userData.photo_id,
-        video_id: userData.video_id,
+        nama: name,
+        umur: age,
+        gender: gender,
+        preferensi: pref,
+        kota: city,
+        bio: bio,
+        photo_id: photoId,
+        video_id: videoId,
         photo_url: null,
         role: 'free',
         is_fake: 0,
@@ -315,7 +358,7 @@ async function completeRegistration(bot, chatId, telegramId) {
     
     state.clearState(telegramId);
     
-    bot.sendMessage(
+    await bot.sendMessage(
       chatId,
       '🎉 *Registrasi Berhasil!*\n\n' +
       'Profil kamu sudah siap. Sekarang kamu bisa mulai mencari pasangan! 💕\n\n' +
@@ -336,7 +379,7 @@ async function completeRegistration(bot, chatId, telegramId) {
     
   } catch (error) {
     console.error('Registration error:', error);
-    bot.sendMessage(chatId, '❌ Terjadi kesalahan. Coba lagi nanti.');
+    await bot.sendMessage(chatId, '❌ Terjadi kesalahan. Coba lagi nanti.');
   }
 }
 
@@ -379,11 +422,11 @@ function getUserById(id) {
 module.exports = {
   startRegistration,
   handleRegistrationInput,
-  handleAgeSelection,
+  handleNameInput,
+  handleAgeInput,
   handleGenderSelection,
   handlePreferenceSelection,
-  handleCitySelection,
-  handleBioInput,
+  handleCityInput,
   handleMediaInput,
   completeRegistration,
   showMainMenu,

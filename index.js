@@ -1,14 +1,6 @@
 /**
  * Bot Match - Ultimate Telegram Dating Bot
  * Main Entry Point
- * 
- * Features:
- * - Like & Match System
- * - Direct Messaging
- * - VIP & Elite Membership
- * - Fake User System
- * - Auto Seed Database
- * - Full Button UI
  */
 
 const path = require('path');
@@ -205,29 +197,17 @@ _Butuh bantuan lebih? Hubungi admin._
         registration.startRegistration(bot, query.message);
       }
       
-      // Age selection during registration
-      else if (data.startsWith('reg_age_')) {
-        const age = parseInt(data.split('_')[2]);
-        registration.handleAgeSelection(bot, chatId, telegramId, age);
-      }
-      
-      // Gender selection
+      // Gender selection (during registration)
       else if (data.startsWith('reg_gender_')) {
         let gender = data.split('_')[2];
         gender = gender.charAt(0).toUpperCase() + gender.slice(1);
-        registration.handleGenderSelection(bot, chatId, telegramId, gender);
+        await registration.handleGenderSelection(bot, chatId, telegramId, gender);
       }
       
-      // Preference selection
+      // Preference selection (during registration)
       else if (data.startsWith('reg_pref_')) {
         const pref = data.split('_')[2];
-        registration.handlePreferenceSelection(bot, chatId, telegramId, pref.charAt(0).toUpperCase() + pref.slice(1));
-      }
-      
-      // City selection
-      else if (data.startsWith('reg_city_')) {
-        const cityIndex = parseInt(data.split('_')[2]);
-        registration.handleCitySelection(bot, chatId, telegramId, cityIndex);
+        await registration.handlePreferenceSelection(bot, chatId, telegramId, pref.charAt(0).toUpperCase() + pref.slice(1));
       }
       
       // Media upload
@@ -251,7 +231,7 @@ _Butuh bantuan lebih? Hubungi admin._
       }
       
       // Like action
-      else if (data.startsWith('like_')) {
+      else if (data.startsWith('like_') && !data.startsWith('like_back_')) {
         const targetId = parseInt(data.split('_')[1]);
         await search.handleLike(bot, chatId, telegramId, targetId);
       }
@@ -319,7 +299,20 @@ _Butuh bantuan lebih? Hubungi admin._
       // ============== EDIT PROFILE ==============
       else if (data.startsWith('edit_')) {
         const field = data.split('_')[1];
-        profile.startEditField(bot, chatId, telegramId, field);
+        await profile.startEditField(bot, chatId, telegramId, field);
+      }
+      
+      // Edit gender selection
+      else if (data.startsWith('edit_gender_')) {
+        let gender = data.split('_')[2];
+        gender = gender.charAt(0).toUpperCase() + gender.slice(1);
+        await profile.handleEditSelection(bot, chatId, telegramId, 'gender', gender);
+      }
+      
+      // Edit preference selection
+      else if (data.startsWith('edit_pref_')) {
+        const pref = data.split('_')[2];
+        await profile.handleEditSelection(bot, chatId, telegramId, 'preferensi', pref.charAt(0).toUpperCase() + pref.slice(1));
       }
       
       // ============== MESSAGES ==============
@@ -336,7 +329,7 @@ _Butuh bantuan lebih? Hubungi admin._
         messaging.cancelMessage(bot, chatId, telegramId);
       }
       
-      else if (data.startsWith('chat_')) {
+      else if (data.startsWith('chat_') && !data.startsWith('chat_send_')) {
         const targetId = parseInt(data.split('_')[1]);
         await messaging.showChat(bot, chatId, telegramId, targetId);
       }
@@ -411,18 +404,19 @@ _Butuh bantuan lebih? Hubungi admin._
         profile.unblockUser(bot, chatId, telegramId, targetId);
       }
       
-      else if (data.startsWith('report_')) {
-        const parts = data.split('_');
-        if (parts[1] === 'reason') {
-          const reason = parts.slice(2).join('_');
-          profile.submitReport(bot, chatId, telegramId, reason);
-        } else if (parts[1] === 'cancel') {
-          state.resetToIdle(telegramId);
-          registration.showMainMenu(bot, chatId);
-        } else {
-          const targetId = parseInt(parts[1]);
-          profile.reportUser(bot, chatId, telegramId, targetId);
-        }
+      else if (data.startsWith('report_reason_')) {
+        const reason = data.split('_').slice(2).join('_');
+        profile.submitReport(bot, chatId, telegramId, reason);
+      }
+      
+      else if (data.startsWith('report_') && !data.startsWith('report_reason_')) {
+        const targetId = parseInt(data.split('_')[1]);
+        profile.reportUser(bot, chatId, telegramId, targetId);
+      }
+      
+      else if (data === 'report_cancel') {
+        state.resetToIdle(telegramId);
+        registration.showMainMenu(bot, chatId);
       }
       
       else if (data === 'settings_delete') {

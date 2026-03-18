@@ -96,9 +96,7 @@ function initTables() {
       user_id INTEGER NOT NULL,
       target_id INTEGER NOT NULL,
       is_match INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id),
-      FOREIGN KEY (target_id) REFERENCES users(id)
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -112,9 +110,7 @@ function initTables() {
       media_type TEXT,
       media_id TEXT,
       is_read INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (from_id) REFERENCES users(id),
-      FOREIGN KEY (to_id) REFERENCES users(id)
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -124,9 +120,7 @@ function initTables() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       blocked_id INTEGER NOT NULL,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id),
-      FOREIGN KEY (blocked_id) REFERENCES users(id)
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -138,9 +132,7 @@ function initTables() {
       reported_id INTEGER NOT NULL,
       reason TEXT,
       status TEXT DEFAULT 'pending',
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (reporter_id) REFERENCES users(id),
-      FOREIGN KEY (reported_id) REFERENCES users(id)
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -152,8 +144,7 @@ function initTables() {
       photo_id TEXT NOT NULL,
       photo_url TEXT,
       position INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id)
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -164,8 +155,7 @@ function initTables() {
       user_id INTEGER NOT NULL,
       video_id TEXT NOT NULL,
       position INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id)
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -173,11 +163,22 @@ function initTables() {
   console.log('✅ Database tables initialized');
 }
 
+// Helper function to convert values for SQLite
+function toSQLiteValue(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  return value;
+}
+
 // Helper function to run query and get results
 function queryAll(sql, params = []) {
+  // Convert all params to safe values
+  const safeParams = params.map(p => toSQLiteValue(p));
+  
   const stmt = db.prepare(sql);
-  if (params.length > 0) {
-    stmt.bind(params);
+  if (safeParams.length > 0) {
+    stmt.bind(safeParams);
   }
   const results = [];
   while (stmt.step()) {
@@ -196,9 +197,16 @@ function queryOne(sql, params = []) {
 
 // Helper function to run insert/update/delete
 function runQuery(sql, params = []) {
-  db.run(sql, params);
+  // Convert all params to safe values
+  const safeParams = params.map(p => toSQLiteValue(p));
+  
+  db.run(sql, safeParams);
   saveDatabase();
-  return { lastInsertRowid: db.exec("SELECT last_insert_rowid() as id")[0]?.values[0]?.[0] };
+  
+  // Get last insert rowid
+  const result = db.exec("SELECT last_insert_rowid() as id");
+  const lastId = result.length > 0 && result[0].values.length > 0 ? result[0].values[0][0] : null;
+  return { lastInsertRowid: lastId };
 }
 
 // User Operations
@@ -207,7 +215,22 @@ const userOps = {
     return runQuery(`
       INSERT INTO users (telegram_id, nama, umur, gender, preferensi, kota, bio, photo_id, video_id, photo_url, role, is_fake, vip_expired, elite_expired)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [data.telegram_id, data.nama, data.umur, data.gender, data.preferensi, data.kota, data.bio, data.photo_id, data.video_id, data.photo_url, data.role, data.is_fake, data.vip_expired, data.elite_expired]);
+    `, [
+      data.telegram_id,
+      data.nama || 'User',
+      data.umur || 25,
+      data.gender || 'Pria',
+      data.preferensi || 'Semua',
+      data.kota || 'Jakarta',
+      data.bio || '',
+      data.photo_id,
+      data.video_id,
+      data.photo_url,
+      data.role || 'free',
+      data.is_fake || 0,
+      data.vip_expired,
+      data.elite_expired
+    ]);
   },
 
   getByTelegramId: (telegramId) => {
@@ -231,7 +254,17 @@ const userOps = {
         video_id = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, [data.nama, data.umur, data.gender, data.preferensi, data.kota, data.bio, data.photo_id, data.video_id, data.id]);
+    `, [
+      data.nama || 'User',
+      data.umur || 25,
+      data.gender || 'Pria',
+      data.preferensi || 'Semua',
+      data.kota || 'Jakarta',
+      data.bio || '',
+      data.photo_id,
+      data.video_id,
+      data.id
+    ]);
   },
 
   updateRole: (role, vipExpired, eliteExpired, id) => {

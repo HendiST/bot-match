@@ -31,33 +31,6 @@ async function startSearch(bot, chatId, telegramId) {
   // Reset daily limits if needed
   db.userOps.resetDailyLimits();
   
-  // Re-fetch user after reset
-  const updatedUser = registration.getUser(telegramId);
-  
-  // Check daily limit
-  const limits = updatedUser.role === 'elite' ? config.ELITE_LIMITS :
-                 updatedUser.role === 'vip' ? config.VIP_LIMITS :
-                 config.FREE_LIMITS;
-  
-  if (limits.dailyLikes > 0 && updatedUser.daily_likes >= limits.dailyLikes) {
-    bot.sendMessage(
-      chatId,
-      `⚠️ *Batas Like Harian Tercapai*\n\n` +
-      `Kamu sudah menggunakan ${updatedUser.daily_likes}/${limits.dailyLikes} like hari ini.\n\n` +
-      `_Upgrade ke VIP untuk like tanpa batas!_`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: '⭐ Upgrade VIP', callback_data: 'vip_menu' }],
-            [{ text: '🏠 Menu Utama', callback_data: 'main_menu' }]
-          ]
-        }
-      }
-    );
-    return;
-  }
-  
   // Store viewed users in temp state
   state.updateTemp(telegramId, { viewedUsers: [], currentIndex: 0 });
   
@@ -83,7 +56,6 @@ async function showNextProfile(bot, chatId, telegramId) {
   let candidates = db.searchUsers(user.id, excludeIds, 1);
   
   if (candidates.length === 0) {
-    // No more candidates
     bot.sendMessage(
       chatId,
       '😔 *Tidak ada profil lain untuk saat ini*\n\n' +
@@ -135,7 +107,6 @@ async function displayProfile(bot, chatId, user, hasLiked = false, isLikeView = 
     keyboard.searchResult(user.id, hasLiked);
   
   try {
-    // Check if user has photo_id (real user) or photo_url (fake user)
     if (user.photo_id) {
       await bot.sendPhoto(chatId, user.photo_id, {
         caption,
@@ -143,7 +114,6 @@ async function displayProfile(bot, chatId, user, hasLiked = false, isLikeView = 
         reply_markup: keyboardType
       });
     } else if (user.photo_url) {
-      // For fake users with URL
       await bot.sendPhoto(chatId, user.photo_url, {
         caption,
         parse_mode: 'Markdown',
@@ -156,7 +126,6 @@ async function displayProfile(bot, chatId, user, hasLiked = false, isLikeView = 
         reply_markup: keyboardType
       });
     } else {
-      // No media
       await bot.sendMessage(chatId, caption, {
         parse_mode: 'Markdown',
         reply_markup: keyboardType
@@ -164,7 +133,6 @@ async function displayProfile(bot, chatId, user, hasLiked = false, isLikeView = 
     }
   } catch (error) {
     console.error('Error displaying profile:', error.message);
-    // Fallback to text only
     await bot.sendMessage(chatId, caption, {
       parse_mode: 'Markdown',
       reply_markup: keyboardType

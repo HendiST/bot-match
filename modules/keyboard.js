@@ -34,37 +34,6 @@ function mainMenu() {
 }
 
 /**
- * Age Selection Keyboard
- */
-function ageSelection() {
-  const keyboard = [];
-  const row1 = [];
-  const row2 = [];
-  const row3 = [];
-  
-  for (let age = 18; age <= 35; age += 1) {
-    if (row1.length < 6) {
-      row1.push({ text: `${age}`, callback_data: `reg_age_${age}` });
-    } else if (row2.length < 6) {
-      row2.push({ text: `${age}`, callback_data: `reg_age_${age}` });
-    } else if (row3.length < 6) {
-      row3.push({ text: `${age}`, callback_data: `reg_age_${age}` });
-    }
-  }
-  
-  keyboard.push(row1, row2, row3);
-  
-  // Add older ages
-  const row4 = [];
-  [36, 40, 45, 50, 55, 60].forEach(age => {
-    row4.push({ text: `${age}`, callback_data: `reg_age_${age}` });
-  });
-  keyboard.push(row4);
-  
-  return { inline_keyboard: keyboard };
-}
-
-/**
  * Gender Selection Keyboard
  */
 function genderSelection() {
@@ -96,21 +65,22 @@ function preferenceSelection() {
 }
 
 /**
- * City Selection Keyboard
+ * Media Request Keyboard
  */
-function citySelection(cities = config.CITIES) {
-  const keyboard = [];
-  
-  for (let i = 0; i < cities.length; i += 2) {
-    const row = [];
-    row.push({ text: cities[i], callback_data: `reg_city_${i}` });
-    if (cities[i + 1]) {
-      row.push({ text: cities[i + 1], callback_data: `reg_city_${i + 1}` });
-    }
-    keyboard.push(row);
-  }
-  
-  return { inline_keyboard: keyboard };
+function mediaRequest() {
+  return {
+    inline_keyboard: [
+      [
+        { text: '📸 Upload Foto', callback_data: 'reg_upload_photo' }
+      ],
+      [
+        { text: '🎬 Upload Video', callback_data: 'reg_upload_video' }
+      ],
+      [
+        { text: '✅ Selesai', callback_data: 'reg_media_done' }
+      ]
+    ]
+  };
 }
 
 /**
@@ -281,7 +251,7 @@ function eliteMenu(isElite = false) {
   return {
     inline_keyboard: [
       [
-        { text: '💎 BeliElite (Rp 150.000)', callback_data: 'elite_buy' }
+        { text: '💎 Beli Elite (Rp 150.000)', callback_data: 'elite_buy' }
       ],
       [
         { text: 'ℹ️ Keuntungan Elite', callback_data: 'elite_info' }
@@ -301,9 +271,6 @@ function settingsMenu() {
     inline_keyboard: [
       [
         { text: '✏️ Edit Profil', callback_data: 'settings_edit_profile' }
-      ],
-      [
-        { text: '🔒 Edit Preferensi', callback_data: 'settings_edit_pref' }
       ],
       [
         { text: '🚫 Daftar Blokir', callback_data: 'settings_blocked' }
@@ -408,29 +375,6 @@ function backButton(callbackData = 'main_menu') {
 }
 
 /**
- * Pagination Keyboard
- */
-function paginationKeyboard(currentPage, totalPages, callbackPrefix) {
-  const keyboard = [];
-  const row = [];
-  
-  if (currentPage > 1) {
-    row.push({ text: '⬅️', callback_data: `${callbackPrefix}_${currentPage - 1}` });
-  }
-  
-  row.push({ text: `${currentPage}/${totalPages}`, callback_data: 'noop' });
-  
-  if (currentPage < totalPages) {
-    row.push({ text: '➡️', callback_data: `${callbackPrefix}_${currentPage + 1}` });
-  }
-  
-  keyboard.push(row);
-  keyboard.push([{ text: '🏠 Menu Utama', callback_data: 'main_menu' }]);
-  
-  return { inline_keyboard: keyboard };
-}
-
-/**
  * Inbox Keyboard
  */
 function inboxKeyboard(users) {
@@ -449,31 +393,11 @@ function inboxKeyboard(users) {
   return { inline_keyboard: keyboard };
 }
 
-/**
- * Media Request Keyboard
- */
-function mediaRequest() {
-  return {
-    inline_keyboard: [
-      [
-        { text: '📸 Upload Foto', callback_data: 'reg_upload_photo' }
-      ],
-      [
-        { text: '🎬 Upload Video', callback_data: 'reg_upload_video' }
-      ],
-      [
-        { text: '✅ Selesai', callback_data: 'reg_media_done' }
-      ]
-    ]
-  };
-}
-
 module.exports = {
   mainMenu,
-  ageSelection,
   genderSelection,
   preferenceSelection,
-  citySelection,
+  mediaRequest,
   profileView,
   searchResult,
   matchView,
@@ -486,7 +410,5 @@ module.exports = {
   chatKeyboard,
   confirmKeyboard,
   backButton,
-  paginationKeyboard,
-  inboxKeyboard,
-  mediaRequest
+  inboxKeyboard
 };

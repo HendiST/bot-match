@@ -9,7 +9,6 @@ const keyboard = require('./keyboard');
 const config = require('../config');
 const registration = require('./registration');
 const fakeUserSeeder = require('./fakeUserSeeder');
-const search = require('./search');
 
 /**
  * Start sending message to a user
@@ -56,7 +55,7 @@ async function startSendMessage(bot, chatId, telegramId, targetId) {
     
     bot.sendMessage(
       chatId,
-      `❤️ *${user.nama}* telah menyukai *${target.nama}*\n\nKamu perlu match terlebih dahulu sebelum bisa kirim pesan.`,
+      `❤️ Kamu menyukai *${target.nama}*\n\nKamu perlu match terlebih dahulu sebelum bisa kirim pesan.`,
       { parse_mode: 'Markdown' }
     );
     return;
@@ -288,25 +287,10 @@ async function showChat(bot, chatId, telegramId, targetId) {
   );
 }
 
-/**
- * View user profile
- */
-async function viewUserProfile(bot, chatId, telegramId, targetId) {
-  const target = registration.getUserById(targetId);
-  
-  if (!target) {
-    bot.sendMessage(chatId, '❌ User tidak ditemukan.');
-    return;
-  }
-  
-  await search.displayProfile(bot, chatId, target, false, false);
-}
-
 module.exports = {
   startSendMessage,
   handleSendMessage,
   cancelMessage,
   showInbox,
-  showChat,
-  viewUserProfile
+  showChat
 };

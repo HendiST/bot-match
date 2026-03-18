@@ -10,6 +10,30 @@ const config = require('../config');
 const registration = require('./registration');
 const search = require('./search');
 
+// Store message IDs to delete
+const messageStore = new Map();
+
+/**
+ * Delete previous message
+ */
+async function deletePreviousMessage(bot, chatId, telegramId) {
+  const lastMsgId = messageStore.get(telegramId);
+  if (lastMsgId) {
+    try {
+      await bot.deleteMessage(chatId, lastMsgId);
+    } catch (e) {
+      // Message might be too old or already deleted
+    }
+  }
+}
+
+/**
+ * Store message ID for deletion
+ */
+function storeMessage(telegramId, msgId) {
+  messageStore.set(telegramId, msgId);
+}
+
 /**
  * Show user profile
  */
@@ -82,7 +106,7 @@ function showEditProfileMenu(bot, chatId) {
 /**
  * Start editing a field
  */
-function startEditField(bot, chatId, telegramId, field) {
+async function startEditField(bot, chatId, telegramId, field) {
   const user = registration.getUser(telegramId);
   
   if (!user) {
@@ -101,8 +125,7 @@ function startEditField(bot, chatId, telegramId, field) {
       message = `📝 Nama saat ini: *${user.nama}*\n\nMasukkan nama baru:`;
       break;
     case 'umur':
-      message = `🎂 Umur saat ini: *${user.umur} tahun*\n\nPilih umur baru:`;
-      replyMarkup = keyboard.ageSelection();
+      message = `🎂 Umur saat ini: *${user.umur} tahun*\n\nMasukkan umur baru (18-60):`;
       break;
     case 'gender':
       message = `👤 Gender saat ini: *${user.gender}*\n\nPilih gender baru:`;
@@ -113,15 +136,14 @@ function startEditField(bot, chatId, telegramId, field) {
       replyMarkup = keyboard.preferenceSelection();
       break;
     case 'kota':
-      message = `🏙️ Kota saat ini: *${user.kota}*\n\nPilih kota baru:`;
-      replyMarkup = keyboard.citySelection();
+      message = `🏙️ Kota saat ini: *${user.kota}*\n\nMasukkan kota baru:`;
       break;
     case 'bio':
-      message = `📝 Bio saat ini:\n*${user.bio || 'Tidak ada bio'}*\n\nMasukkan bio baru:`;
+      message = `📝 Bio saat ini:\n*${user.bio || 'Tidak ada bio'}*\n\nMasukkan bio baru (atau kirim "-" untuk kosongkan):`;
       break;
     case 'photo':
-      registration.requestMedia(bot, chatId);
       state.setRegState(telegramId, state.REGISTRATION_STATES.WAITING_MEDIA);
+      bot.sendMessage(chatId, '📸 Kirim foto profil baru:');
       return;
     case 'video':
       message = '🎬 Kirim video profil baru:';
@@ -130,10 +152,11 @@ function startEditField(bot, chatId, telegramId, field) {
       message = 'Pilih yang ingin diedit:';
   }
   
-  bot.sendMessage(chatId, message, {
+  const sentMsg = await bot.sendMessage(chatId, message, {
     parse_mode: 'Markdown',
     reply_markup: replyMarkup
   });
+  storeMessage(telegramId, sentMsg.message_id);
 }
 
 /**
@@ -161,11 +184,32 @@ async function handleEditInput(bot, msg) {
         success = true;
       }
       break;
-    case 'bio':
-      if (text && text.length >= 10 && text.length <= 500) {
+    
+    case 'umur':
+      const age = parseInt(text);
+      if (!isNaN(age) && age >= 18 && age <= 60) {
+        value = age;
         success = true;
       }
       break;
+    
+    case 'kota':
+      if (text && text.length >= 2 && text.length <= 50) {
+        value = text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+        success = true;
+      }
+      break;
+    
+    case 'bio':
+      // Bio is optional
+      if (text === '-') {
+        value = '';
+      } else {
+        value = text || '';
+      }
+      success = true;
+      break;
+    
     case 'video':
       if (msg.video) {
         value = msg.video.file_id;
@@ -180,6 +224,7 @@ async function handleEditInput(bot, msg) {
           video_id: value,
           id: user.id
         });
+        await deletePreviousMessage(bot, chatId, telegramId);
         bot.sendMessage(chatId, '✅ Video berhasil diperbarui!');
         state.resetToIdle(telegramId);
         showProfile(bot, chatId, telegramId);
@@ -204,6 +249,7 @@ async function handleEditInput(bot, msg) {
     
     db.userOps.update(updateData);
     
+    await deletePreviousMessage(bot, chatId, telegramId);
     bot.sendMessage(chatId, `✅ ${field.charAt(0).toUpperCase() + field.slice(1)} berhasil diperbarui!`);
     state.resetToIdle(telegramId);
     showProfile(bot, chatId, telegramId);
@@ -213,20 +259,24 @@ async function handleEditInput(bot, msg) {
       case 'nama':
         errorMsg = 'Nama harus 2-50 karakter.';
         break;
-      case 'bio':
-        errorMsg = 'Bio harus 10-500 karakter.';
+      case 'umur':
+        errorMsg = 'Umur harus angka 18-60.';
+        break;
+      case 'kota':
+        errorMsg = 'Kota tidak valid.';
         break;
       default:
         errorMsg = 'Input tidak valid.';
     }
-    bot.sendMessage(chatId, `❌ ${errorMsg} Coba lagi:`);
+    const sentMsg = await bot.sendMessage(chatId, `❌ ${errorMsg} Coba lagi:`);
+    storeMessage(telegramId, sentMsg.message_id);
   }
 }
 
 /**
- * Handle edit selection (age, gender, preference, city)
+ * Handle edit selection (gender, preference)
  */
-function handleEditSelection(bot, chatId, telegramId, field, value) {
+async function handleEditSelection(bot, chatId, telegramId, field, value) {
   const user = registration.getUser(telegramId);
   
   if (!user) return;
@@ -246,6 +296,7 @@ function handleEditSelection(bot, chatId, telegramId, field, value) {
   
   db.userOps.update(updateData);
   
+  await deletePreviousMessage(bot, chatId, telegramId);
   bot.sendMessage(chatId, `✅ ${field.charAt(0).toUpperCase() + field.slice(1)} berhasil diperbarui!`);
   state.resetToIdle(telegramId);
   showProfile(bot, chatId, telegramId);
